@@ -49,6 +49,11 @@ Each step is a standalone Python script. From the repo root:
 - Step 5: Model Training — ✅ complete (2026-05-16)
 - Step 6: Signal API — ✅ complete (2026-05-16)
 
+## Review status
+
+All 7 source files independently reviewed (step01–step06 + signal_api).
+No remaining L1/L2 bugs. [Known issues deferred](KNOWN_ISSUES.md) for production phase.
+
 ## Future scope (NOT in Sandwich)
 
 The Wing Optimizer is a separate, planned module that lives in the data 
