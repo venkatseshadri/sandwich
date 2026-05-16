@@ -2,6 +2,31 @@
 
 **For Claude to revisit and verify.** All files below exist at `github.com/venkatseshadri/sandwich`.
 
+## Data Source — v3.1 ONLY (v4 explicitly excluded)
+
+**Sandwich POC reads exclusively from v3.1 DuckDB data.** The `market_data` and `option_snapshots` tables in `/home/trading_ceo/python-trader/varaha/data/varaha_data.duckdb` (populated by `data_capture_v3.1_duckdb.py`).
+
+### What IS used
+- `market_data` — 1-min NIFTY spot, VIX, DTE, ATM strike (columns: timestamp, date, time, spot, india_vix, days_to_weekly, atm_strike)
+- `option_snapshots` — weekly expiry CE/PE chain (columns: timestamp, strike_offset, option_type, oi, iv, ltp)
+
+### What is NOT used
+- **v4 multi-timeframe aggregator** (`data_capture_v4_queue_aggregator.py`) — populates `market_data_multitf` table in a **separate** DuckDB file (`market_data_multitf.duckdb`). This table has SMA20/50/200, MACD, ADX+DI, Bollinger Bands, OBV, CMF, CCI across 5/15/30/60/240/1440-minute timeframes. **Explicitly out of scope for POC.** The spec states: _"market_data_multitf (in a separate varaha_data_multitf.duckdb, NOT in scope for this POC)."_
+- **v4 multitf aggregator** (`data_capture_v4_multitf_aggregator.py`) — simplified batch version writing to the same `varaha_data.duckdb`. Also excluded.
+
+### Why
+The POC goal is to validate the pipeline architecture end-to-end with minimal data. Adding multi-timeframe features (SMA across 5m/15m/30m/1h/4h/1D) would:
+1. Require a second DB connection and cross-DB joining logic
+2. Inflate the feature count from 41 to ~80+ (duplicating trend/momentum families per timeframe)
+3. Multiply the data sparsity problem — 8 days of 1-min data is marginal; 8 days of 1D bars is useless
+4. Create maintenance coupling to the separate v4 DB schema
+
+### Future integration path (NOT in scope)
+When production accumulation has 30+ trading days:
+1. Join `market_data_multitf` on `(timestamp, index_name)` for higher-TF context
+2. Add multi-TF features: `stf_5m_ema20`, `stf_15m_sma50`, etc.
+3. Run Steps 4-6 on the expanded feature set with proper walk-forward validation
+
 ## Architecture
 
 Sandwich is a 6-step pipeline that mines paper-trade data to produce probabilistic entry signals for NIFTY ATM credit spreads:
