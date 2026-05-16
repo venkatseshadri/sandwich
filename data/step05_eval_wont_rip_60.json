@@ -1,0 +1,1 @@
+{"test_n": 762, "test_pos_rate": 0.479, "logloss": 0.8552, "brier": 0.3159, "auc": 0.2921, "top_decile_precision": 0.3291, "untrustworthy": true}
