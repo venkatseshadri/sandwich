@@ -48,3 +48,18 @@ Each step is a standalone Python script. From the repo root:
 - Step 4: Base Rates & Feature Lift — ✅ complete (2026-05-16)
 - Step 5: Model Training — ✅ complete (2026-05-16)
 - Step 6: Signal API — ✅ complete (2026-05-16)
+
+## Future scope (NOT in Sandwich)
+
+The Wing Optimizer is a separate, planned module that lives in the data 
+capture layer (varaha), not in Sandwich. Its job: at each minute (or 
+every 5 minutes), evaluate the live option chain and compute the optimal 
+wing width for both PE-side and CE-side credit spreads, optimizing return-
+on-capital subject to SPAN margin constraints.
+
+Wing Optimizer output (best_pe_wing_short, best_pe_wing_long, 
+best_pe_breakeven_cushion, etc.) becomes additional columns in market_data, 
+which Sandwich then consumes as input features in a future iteration.
+
+Wing Optimizer does NOT depend on Sandwich. Sandwich consumes Wing 
+Optimizer's output, not the other way around.

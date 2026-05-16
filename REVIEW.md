@@ -35,43 +35,54 @@ Sandwich is a 6-step pipeline that mines paper-trade data to produce probabilist
 Data Capture (external) → Step 1 (inspect) → Step 2 (label) → Step 3 (features) → Step 4 (lift) → Step 5 (model) → Step 6 (API deliverable)
 ```
 
-## Data Source
+## Revision Status (Post-POC R1+R2+R3)
 
-**Only v3 / v3.1 DuckDB data.** The `market_data` table at `/home/trading_ceo/python-trader/varaha/data/varaha_data.duckdb`.
-- `market_data` — 1-min spot, VIX, DTE, ATM strike (104 columns available, 7 used)
-- `option_snapshots` — strike-wise OI, LTP, IV for weekly expiry options (joined on timestamp)
+| Revision | Change | Status |
+|----------|--------|--------|
+| R1 | Drop range_holds label (iron condor not in playbook) | ✅ |
+| R2 | 15-feature lean balanced panel (was 41) | ✅ |
+| R3 | Document Wing Optimizer as future varaha scope | ✅ |
 
-**v4 multi-timeframe data is NOT used.** The spec explicitly excludes it: `market_data_multitf` lives in a separate DB and is declared out of scope for the POC. The 41 features are all computed from 1-min `market_data` joined with `option_snapshots` — no higher-timeframe bars, no SMA50/200, no MACD, no OBV/CMF.
+## Feature families (R2: 15 features, 9 families)
 
-## Feature families
+Reduced from 41 features to 15, balanced across families, to prevent implicit family-count bias in the model. Family count no longer correlates with family importance. The remaining 15 features each carry a clear hypothesis.
 
-All 41 features at 1-minute resolution, computed deterministically in pandas:
+| # | Feature | Family | Computation |
+|---|---------|--------|-------------|
+| 1 | `trend_1m` | Trend | -1/0/+1: spot vs EMA20 + EMA20 slope on 1-min |
+| 2 | `trend_5m` | Trend | -1/0/+1: same logic resampled to 5-min bars |
+| 3 | `trend_1h` | Trend | -1/0/+1: same logic resampled to 60-min bars |
+| 4 | `trend_1d` | Trend | -1/0/+1: daily close direction + 5-day slope |
+| 5 | `mom_rsi_14` | Momentum | Wilder RSI(14) on 1-min spot |
+| 6 | `vol_atr_pct` | Volatility | ATR(14) / spot, using abs(spot.diff()) as TR |
+| 7 | `vol_india_vix` | Volatility | India VIX as captured |
+| 8 | `vwap_distance` | Volume | (spot - intraday_vwap) / spot. Uniform 1/min volume proxy |
+| 9 | `opt_atm_iv` | Options | IV of ATM CE from option_snapshots |
+| 10 | `opt_pcr_oi` | Options | sum(PE OI for offsets -5..+5) / sum(CE OI same range) |
+| 11 | `opt_atm_oi_change_5m` | Options | ATM CE OI delta over 5 minutes |
+| 12 | `time_minutes_since_open` | Time | minute_of_day - 555 |
+| 13 | `expiry_dte` | Expiry | days_to_weekly from market_data |
+| 14 | `sr_dist_to_yday_high` | Structure | (yesterday_high - spot) / spot |
+| 15 | `sr_dist_to_yday_low` | Structure | (spot - yesterday_low) / spot |
 
-| Family | Count | Features |
-|--------|-------|----------|
-| TREND | 12 | EMA5/20/50, spot vs EMA ratios, EMA slopes, higher_high/lower_low_20, above_VWAP, VWAP distance |
-| MOMENTUM | 6 | RSI(14) Wilder, RSI slope, ROC(5/15/60), consecutive-up bars |
-| VOLATILITY | 5 | ATR(14) proxy, ATR pct, realized vol 30m annualized, VIX, VIX change 1d |
-| TIME | 4 | minute_of_day, minutes_since_open, minutes_to_close, day_of_week |
-| EXPIRY | 3 | DTE, is_dte0, is_dte_le2 |
-| OPTIONS | 8 | ATM CE/PE IV, IV skew, PCR OI, OI change 5m, max pain offset, ATM OI changes |
-| REGIME | 3 | VIX low/mid/high flags (currently all "mid" — 15.9-19.0) |
+No family has more than 4 features. Multi-TF trend colors replace raw EMA stacks.
 
-## Labels
+## Labels (R1: 2 labels, range_holds removed)
 
-Three binary labels per timestamp, each with a 60-minute future window:
+Two binary labels per timestamp, each with a 60-minute future window:
 
 | Label | Meaning | Base rate | TRUE count |
 |-------|---------|-----------|------------|
 | `wont_crash_60` | Max drawdown in next 60 min ≤ 25 points | 37.6% | 955 |
 | `wont_rip_60` | Max excursion in next 60 min ≤ 25 points | 48.4% | 1,229 |
-| `range_60` | Spot stays in ±25 pt band for 60 min | 4.2% | 106 |
 
 IN_FLIGHT when insufficient future bars within the same trading date.
 
+**Why 2 labels not 3:** Iron condor not in trading playbook. Two independent single-side signals (wont_crash for PE-side bull put, wont_rip for CE-side bear call) cover the trading universe. Both firing simultaneously composes into a condor at the strategy layer, not at the signal layer.
+
 ## Models
 
-3 GradientBoostingClassifier models (sklearn), each wrapped in CalibratedClassifierCV (isotonic, 3-fold):
+2 GradientBoostingClassifier models (sklearn), each wrapped in CalibratedClassifierCV (isotonic, 3-fold):
 
 ```
 GBM_PARAMS = {n_estimators: 200, max_depth: 3, learning_rate: 0.05, subsample: 0.8, random_state: 42}
@@ -83,9 +94,10 @@ Time-series split: first 70% (May 4-11 morning) → train, last 30% (May 11 afte
 
 | Label | AUC | Top-decile hit | >0.70 signals |
 |-------|-----|----------------|---------------|
-| wont_crash_60 | 0.54 | 46.8% vs 43.8% base | 156 |
-| wont_rip_60 | 0.29 | 32.9% vs 47.9% base | 0 |
-| range_60 | 0.50 | 6.1% vs 5.4% base | 0 |
+| wont_crash_60 | 0.52 | 55.6% vs 43.8% base | 0 |
+| wont_rip_60 | 0.39 | 26.0% vs 47.9% base | 0 |
+
+AUC near coin-flip on 15 lean features — expected. No >0.70 signals generated.
 
 ## API contract
 
@@ -93,13 +105,15 @@ Time-series split: first 70% (May 4-11 morning) → train, last 30% (May 11 afte
 from signal_api import SandwichSignalEngine
 engine = SandwichSignalEngine()
 
-# Single snapshot
+# Single snapshot (15 features, 2 labels)
 signal = engine.predict({
-    "trend_ema_5": 24000.0,
-    "trend_ema_20": 23980.0,
-    # ... all 41 features ...
+    "trend_1m": 1, "trend_5m": 0, "trend_1h": 1, "trend_1d": -1,
+    "mom_rsi_14": 52.0, "vol_atr_pct": 0.00025, "vol_india_vix": 18.5,
+    "vwap_distance": -0.001, "opt_atm_iv": 15.2, "opt_pcr_oi": 0.95,
+    "opt_atm_oi_change_5m": 15000, "time_minutes_since_open": 75,
+    "expiry_dte": 4, "sr_dist_to_yday_high": 0.005, "sr_dist_to_yday_low": 0.008,
 }, timestamp="2026-05-15T11:05:00")
-# → {"timestamp": "...", "probabilities": {"wont_crash_60": 0.372, ...},
+# → {"timestamp": "...", "probabilities": {"wont_crash_60": 0.407, "wont_rip_60": 0.431},
 #     "model_metadata": {"untrustworthy": True}}
 
 # Batch
@@ -125,19 +139,19 @@ sandwich/
 │   ├── __init__.py
 │   ├── step01_connect_and_inspect.py   # 5 functions, DuckDB read + plot
 │   ├── step02_labeler.py              # 5 functions, labeler + validate
-│   ├── step03_features.py             # 12 functions, 41 features
-│   ├── step04_base_rates_and_lift.py  # 12 functions, lift + breakdowns
-│   ├── step05_model.py                # 7 functions, GBM + calibration
+│   ├── step03_features.py             # 10 functions, 15 features (R2)
+│   ├── step04_base_rates_and_lift.py  # 11 functions, 2-label lift + breakdowns
+│   ├── step05_model.py                # 7 functions, 2-model GBM + calibration
 │   └── step06_signal_api_test.py      # Test harness, smoke test
 └── data/
-    ├── step02_labels.parquet           # 3,039 × 9 columns, 57.5 KB
-    ├── step03_features_and_labels.parquet  # joined dataset, 784 KB
-    ├── step04_*.csv                    # 16 CSV files
-    ├── step05_model_*.pkl              # 3 pickle files (~50 KB each)
-    ├── step05_medians_*.json           # 3 JSON files
-    ├── step05_eval_*.json              # 3 JSON files
-    ├── step05_feature_columns.json     # Feature order (41 columns)
-    ├── step06_signal_log.csv           # 156 signals > 0.70
+    ├── step02_labels.parquet           # 3,039 × 8 columns, 57 KB
+    ├── step03_features_and_labels.parquet  # joined dataset, 251 KB
+    ├── step04_*.csv                    # 12 CSV files (2 labels)
+    ├── step05_model_*.pkl              # 2 pickle files
+    ├── step05_medians_*.json           # 2 JSON files
+    ├── step05_eval_*.json              # 2 JSON files
+    ├── step05_feature_columns.json     # Feature order (15 columns)
+    ├── step06_signal_log.csv           # Signal log
     └── step06_summary.json            # Aggregate stats
 ```
 
@@ -165,13 +179,24 @@ sandwich/
 - Feature importance / SHAP analysis
 - Real paper-trade outcomes as labels (currently labels are derived from spot path, not actual trade P&L)
 
+## Wing Optimizer (future varaha scope, NOT Sandwich)
+
+The Wing Optimizer is a separate planned module in the data capture layer (varaha). At each minute (or every 5 minutes), it evaluates the live option chain and computes optimal wing width for PE-side and CE-side credit spreads, optimizing return-on-capital subject to SPAN margin constraints.
+
+Output columns (added to market_data):
+- `best_pe_wing_short`, `best_pe_wing_long`, `best_pe_breakeven_cushion`
+- `best_ce_wing_short`, `best_ce_wing_long`, `best_ce_breakeven_cushion`
+- `best_ce_roc`, `best_pe_roc`
+
+Sandwich would then consume these as additional features. Wing Optimizer does NOT depend on Sandwich; Sandwich consumes Wing Optimizer's output.
+
 ## To run the full pipeline
 
 ```bash
 cd /home/trading_ceo/sandwich
 python3 steps/step01_connect_and_inspect.py   # verify DB
 python3 steps/step02_labeler.py               # compute labels
-python3 steps/step03_features.py              # 41 features
+python3 steps/step03_features.py              # 15 features
 python3 steps/step04_base_rates_and_lift.py   # lift tables
 python3 steps/step05_model.py                 # train models
 python3 steps/step06_signal_api_test.py       # API + trade log
