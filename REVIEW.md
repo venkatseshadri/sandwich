@@ -1,5 +1,6 @@
 # Sandwich POC — Complete Implementation Review
 
+**Commit:** `5fe426f` | **Date:** 2026-05-16 | **Branch:** `master`
 **For Claude to revisit and verify.** All files below exist at `github.com/venkatseshadri/sandwich`.
 
 ## Data Source — v3.1 ONLY (v4 explicitly excluded)
@@ -98,6 +99,32 @@ Time-series split: first 70% (May 4-11 morning) → train, last 30% (May 11 afte
 | wont_rip_60 | 0.39 | 26.0% vs 47.9% base | 0 |
 
 AUC near coin-flip on 15 lean features — expected. No >0.70 signals generated.
+
+### Latest correlation pairs (|corr| > 0.85)
+
+Only 1 pair — vs 18 pairs in the 41-feature version. Features are deliberately orthogonal:
+
+| feat_a | feat_b | correlation |
+|--------|--------|-------------|
+| sr_dist_to_yday_high | sr_dist_to_yday_low | -0.966 |
+
+(Expected: they are symmetric measures from the same source.)
+
+### Latest Step 4 lift rankings
+
+Top 3 features by lift spread for wont_crash_60:
+```
+time_minutes_since_open  lift_spread=0.648
+trend_5m                 lift_spread=0.642
+opt_atm_iv               lift_spread=0.635
+```
+
+Top 3 for wont_rip_60:
+```
+vol_india_vix            lift_spread=0.589
+opt_atm_iv               lift_spread=0.501
+trend_1m                 lift_spread=0.438
+```
 
 ## API contract
 
@@ -200,4 +227,33 @@ python3 steps/step03_features.py              # 15 features
 python3 steps/step04_base_rates_and_lift.py   # lift tables
 python3 steps/step05_model.py                 # train models
 python3 steps/step06_signal_api_test.py       # API + trade log
+```
+
+## Latest pipeline execution (2026-05-16 ~16:00 IST)
+
+```
+Step 1:  3,039 rows, 27.5 MB DB, 60s cadence, zero nulls
+Step 2:  2 labels, 955 TRUE/1,584 FALSE/500 IN_FLIGHT (wont_crash)
+                       1,229 TRUE/1,310 FALSE/500 IN_FLIGHT (wont_rip)
+Step 3:  15 features, 3,039 × 15 joined, 251 KB parquet, 1 correlation pair
+Step 4:  base rates 37.6% (wont_crash) / 48.4% (wont_rip)
+Step 5:  2 models, AUC 0.52 / 0.39, logloss 0.72 / 0.76, all untrustworthy
+Step 6:  SandwichSignalEngine operational, 0 signals >0.70 in test set
+```
+
+## Commit history
+
+```
+5fe426f R3: document Wing Optimizer as future varaha scope
+ad93b68 R2: lean 15-feature panel balanced across 9 families
+b0dc222 R1: drop range_holds label, iron condor not in playbook
+90a1283 docs: clarify v3.1-only data source, v4 explicitly excluded per spec
+b0f3125 docs: add full implementation review for Claude revisit
+b8f1264 Add .gitignore, remove __pycache__
+590854a Step 6: signal API and POC closeout
+b0f9294 Step 5: model training — GradientBoosting + calibration
+02a03a0 Step 4: base rates and feature lift
+464b72f Step 3: feature panel — 41 features across 7 families
+0eabde2 Step 2: labeler — wont_crash, wont_rip, range_holds with IN_FLIGHT
+08309fd Cleanup: consolidate docs, move Step 1 report to reports/
 ```
