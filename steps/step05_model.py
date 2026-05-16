@@ -29,7 +29,7 @@ GBM_PARAMS = {
     "random_state": 42,
 }
 
-LABEL_COLS = ["wont_crash_60", "wont_rip_60", "range_60"]
+LABEL_COLS = ["wont_crash_60", "wont_rip_60"]
 
 FEATURE_COLS = [
     "trend_ema_5",

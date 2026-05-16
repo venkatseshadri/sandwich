@@ -22,12 +22,6 @@ INDEX = "NIFTY"
 LABEL_PARAMS = {
     "wont_crash_60": {"label_type": "wont_crash", "Y": 25, "T_minutes": 60},
     "wont_rip_60": {"label_type": "wont_rip", "Y": 25, "T_minutes": 60},
-    "range_60": {
-        "label_type": "range_holds",
-        "Y_up": 25,
-        "Y_down": 25,
-        "T_minutes": 60,
-    },
 }
 
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "data"

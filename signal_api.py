@@ -39,7 +39,7 @@ class SandwichSignalEngine:
         with open(self.data_dir / "step05_feature_columns.json") as f:
             self.feature_cols = json.load(f)
 
-        for label in ["wont_crash_60", "wont_rip_60", "range_60"]:
+        for label in ["wont_crash_60", "wont_rip_60"]:
             model_path = self.data_dir / f"step05_model_{label}.pkl"
             medians_path = self.data_dir / f"step05_medians_{label}.json"
             eval_path = self.data_dir / f"step05_eval_{label}.json"
@@ -62,7 +62,7 @@ class SandwichSignalEngine:
     def predict(self, features_dict, timestamp=None):
         """Predict single snapshot. Returns signal dict."""
         probs = {}
-        for label in ["wont_crash_60", "wont_rip_60", "range_60"]:
+        for label in ["wont_crash_60", "wont_rip_60"]:
             row_df = self._prepare_row(features_dict, label)
             prob = float(self.models[label].predict_proba(row_df)[:, 1][0])
             probs[label] = round(prob, 4)
@@ -80,7 +80,7 @@ class SandwichSignalEngine:
     def predict_batch(self, features_df):
         """Predict batch. Returns DataFrame with probability columns."""
         result = features_df.copy()
-        for label in ["wont_crash_60", "wont_rip_60", "range_60"]:
+        for label in ["wont_crash_60", "wont_rip_60"]:
             med = self.medians[label]
             X = result[self.feature_cols].fillna(pd.Series(med)).fillna(0)
             result[f"prob_{label}"] = self.models[label].predict_proba(X)[:, 1]

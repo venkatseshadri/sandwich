@@ -18,7 +18,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 FEATURES_PATH = DATA_DIR / "step03_features_and_labels.parquet"
 
-LABEL_COLS = ["wont_crash_60", "wont_rip_60", "range_60"]
+LABEL_COLS = ["wont_crash_60", "wont_rip_60"]
 
 FEATURE_COLS = [
     "trend_ema_5",
