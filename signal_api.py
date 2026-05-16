@@ -52,28 +52,46 @@ class SandwichSignalEngine:
                 self.metadata[label] = json.load(f)
 
     def _prepare_row(self, features_dict, label):
+        """
+        Build a single-row DataFrame for prediction.
+        Returns (DataFrame, list_of_imputed_feature_names).
+        """
         row = {}
+        imputed = []
         med = self.medians[label]
         for fc in self.feature_cols:
             val = features_dict.get(fc)
-            row[fc] = val if val is not None else med.get(fc, 0.0)
-        return pd.DataFrame([row])
+            if val is None or (isinstance(val, float) and np.isnan(val)):
+                row[fc] = med.get(fc, 0.0)
+                imputed.append(fc)
+            else:
+                row[fc] = val
+        return pd.DataFrame([row]), imputed
 
     def predict(self, features_dict, timestamp=None):
         """Predict single snapshot. Returns signal dict."""
         probs = {}
+        imputed_per_label = {}
         for label in ["wont_crash_60", "wont_rip_60"]:
-            row_df = self._prepare_row(features_dict, label)
+            row_df, imputed = self._prepare_row(features_dict, label)
             prob = float(self.models[label].predict_proba(row_df)[:, 1][0])
             probs[label] = round(prob, 4)
+            imputed_per_label[label] = imputed
+
+        imputed_features = imputed_per_label["wont_crash_60"]
 
         sample_meta = self.metadata.get("wont_crash_60", {})
         return {
             "timestamp": timestamp,
             "probabilities": probs,
             "model_metadata": {
-                "trained_on_n": sample_meta.get("test_n", 0),
-                "untrustworthy": True,
+                "trained_on_n": sample_meta.get("actual_train_n", 0),
+                "test_n": sample_meta.get("test_n", 0),
+                "untrustworthy": sample_meta.get("untrustworthy", True),
+                "min_trusted_train": sample_meta.get("min_trusted_train"),
+                "features_imputed": imputed_features,
+                "n_features_imputed": len(imputed_features),
+                "n_features_total": len(self.feature_cols),
             },
         }
 

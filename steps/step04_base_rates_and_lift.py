@@ -85,25 +85,54 @@ def compute_base_rates(df, label_cols):
 
 
 def bucket_feature(series, n_buckets=4):
-    """Bucket a numeric feature into quantile buckets."""
+    """
+    Bucket a numeric feature into quantile buckets.
+
+    Cases:
+    - Few distinct values (<=n_buckets): use each value as its own bucket (treat as categorical)
+    - Normal case: qcut with duplicates="drop"; log if fewer buckets result than requested
+    - qcut fails: return NaN series, do NOT silently coerce to strings
+    """
+    name = getattr(series, "name", "<unnamed>")
     s = series.dropna()
-    if s.nunique() <= 2:
+
+    if len(s) == 0:
+        return pd.Series([np.nan] * len(series), index=series.index)
+
+    n_unique = s.nunique()
+    if n_unique <= n_buckets:
         return series.astype(str)
+
     try:
-        labels = [f"q{i + 1}" for i in range(n_buckets)]
-        result = pd.qcut(s, n_buckets, labels=labels, duplicates="drop")
+        result, edges = pd.qcut(s, n_buckets, retbins=True, duplicates="drop")
+        actual = len(edges) - 1
+        if actual < n_buckets:
+            print(
+                f"  Note: {name} bucketed into {actual} buckets (requested {n_buckets})"
+            )
         return result.reindex(series.index)
-    except Exception:
-        return series.astype(str)
+    except ValueError as e:
+        print(f"  Could not bucket {name}: {e}")
+        return pd.Series([np.nan] * len(series), index=series.index)
 
 
-def compute_lift_table(df, feature_col, label_col, base_rate, min_bucket_n=20):
-    """For each bucket of feature_col, compute P(label==TRUE) and lift."""
+def compute_lift_table(
+    df, feature_col, label_col, base_rate, min_bucket_n=20, precomputed_buckets=None
+):
+    """
+    For each bucket of feature_col, compute P(label==TRUE) and lift.
+    If precomputed_buckets is provided, use it instead of bucketing here
+    (ensures the same buckets are used across multiple labels for fair comparison).
+    """
     valid = df[[feature_col, label_col]].dropna()
     if len(valid) == 0:
         return pd.DataFrame()
 
-    buckets = bucket_feature(valid[feature_col])
+    if precomputed_buckets is not None:
+        buckets = precomputed_buckets.reindex(valid.index)
+    else:
+        buckets = bucket_feature(valid[feature_col])
+
     unique_buckets = sorted(buckets.dropna().unique())
 
     rows = []
@@ -126,7 +155,11 @@ def rank_features_by_lift(df, feature_cols, label_col, base_rate):
     """For each feature, compute max-min lift spread across buckets."""
     rows = []
     for fc in feature_cols:
-        lt = compute_lift_table(df, fc, label_col, base_rate)
+        # Bucket the feature once on the full df (not inside compute_lift_table)
+        feature_buckets = bucket_feature(df[fc])
+        lt = compute_lift_table(
+            df, fc, label_col, base_rate, precomputed_buckets=feature_buckets
+        )
         if lt.empty or len(lt) < 2:
             continue
         max_lift = lt["lift"].max()
