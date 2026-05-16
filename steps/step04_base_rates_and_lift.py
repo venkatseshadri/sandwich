@@ -21,47 +21,21 @@ FEATURES_PATH = DATA_DIR / "step03_features_and_labels.parquet"
 LABEL_COLS = ["wont_crash_60", "wont_rip_60"]
 
 FEATURE_COLS = [
-    "trend_ema_5",
-    "trend_ema_20",
-    "trend_ema_50",
-    "trend_spot_vs_ema5",
-    "trend_spot_vs_ema20",
-    "trend_spot_vs_ema50",
-    "trend_ema5_slope",
-    "trend_ema20_slope",
-    "trend_higher_high_20",
-    "trend_lower_low_20",
-    "trend_above_vwap",
-    "trend_vwap_distance",
+    "trend_1m",
+    "trend_5m",
+    "trend_1h",
+    "trend_1d",
     "mom_rsi_14",
-    "mom_rsi_14_slope",
-    "mom_roc_5",
-    "mom_roc_15",
-    "mom_roc_60",
-    "mom_consecutive_up",
-    "vol_atr_14",
-    "vol_atr_14_pct",
-    "vol_realized_30",
-    "vol_vix",
-    "vol_vix_change_1d",
-    "time_minute_of_day",
-    "time_minutes_since_open",
-    "time_minutes_to_close",
-    "time_day_of_week",
-    "expiry_dte",
-    "expiry_is_dte0",
-    "expiry_is_dte_le2",
+    "vol_atr_pct",
+    "vol_india_vix",
+    "vwap_distance",
     "opt_atm_iv",
-    "opt_atm_pe_iv",
-    "opt_iv_skew",
     "opt_pcr_oi",
-    "opt_total_oi_change_5m",
-    "opt_max_pain_offset",
-    "opt_atm_ce_oi_change_5m",
-    "opt_atm_pe_oi_change_5m",
-    "regime_vix_low",
-    "regime_vix_mid",
-    "regime_vix_high",
+    "opt_atm_oi_change_5m",
+    "time_minutes_since_open",
+    "expiry_dte",
+    "sr_dist_to_yday_high",
+    "sr_dist_to_yday_low",
 ]
 
 
@@ -171,11 +145,11 @@ def rank_features_by_lift(df, feature_cols, label_col, base_rate):
 
 
 def time_of_day_breakdown(df, label_col, bin_minutes=30):
-    """Break label by 30-minute buckets of time_minute_of_day."""
-    df = df.dropna(subset=["time_minute_of_day", label_col])
-    tod = df["time_minute_of_day"]
-    bins = np.arange(555, 931, bin_minutes)
-    labels = [f"{b // 60}:{b % 60:02d}" for b in bins[:-1]]
+    """Break label by 30-minute buckets of time_minutes_since_open."""
+    df = df.dropna(subset=["time_minutes_since_open", label_col])
+    tod = df["time_minutes_since_open"]
+    bins = np.arange(0, 376, bin_minutes)
+    labels = [f"{(b + 555) // 60}:{(b + 555) % 60:02d}" for b in bins[:-1]]
     bucket = pd.cut(tod, bins=bins, labels=labels, right=False)
     rows = []
     for b in labels:
@@ -190,8 +164,8 @@ def time_of_day_breakdown(df, label_col, bin_minutes=30):
 
 def vix_regime_breakdown(df, label_col):
     """Break label by VIX regime."""
-    df = df.dropna(subset=["vol_vix", label_col])
-    vix = df["vol_vix"]
+    df = df.dropna(subset=["vol_india_vix", label_col])
+    vix = df["vol_india_vix"]
     regimes = []
     for _, v in vix.items():
         if v < 14:
@@ -232,16 +206,16 @@ def main():
     df = load_dataset()
     n_before = len(df)
     # Keep only rows with at least some features
-    df = df.dropna(subset=["vol_vix", "expiry_dte"])
-    print(f"Dropped NaN vol_vix/expiry_dte: {n_before - len(df):,} rows")
-
+    df = df.dropna(subset=["vol_india_vix", "expiry_dte"])
+    print(f"Dropped NaN vol_india_vix/expiry_dte: {n_before - len(df):,} rows")
     base_rates = compute_base_rates(df, LABEL_COLS)
     base_rates.to_csv(DATA_DIR / "step04_base_rates.csv", index=False)
 
-    # Date/Vix window context
     date_col = "date_feat" if "date_feat" in df.columns else "date"
     print(f"\nDate range: {df[date_col].min()} to {df[date_col].max()}")
-    print(f"VIX range: {df['vol_vix'].min():.1f} to {df['vol_vix'].max():.1f}")
+    print(
+        f"VIX range: {df['vol_india_vix'].min():.1f} to {df['vol_india_vix'].max():.1f}"
+    )
     print(
         f"INSUFFICIENT DATA WARNING: {len(df)} samples across {df[date_col].nunique()} dates. "
     )

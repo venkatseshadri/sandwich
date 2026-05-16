@@ -30,7 +30,7 @@ def main():
 
     # Load data
     df = pd.read_parquet(FEATURES_PATH)
-    for lc in ["wont_crash_60", "wont_rip_60", "range_60"]:
+    for lc in ["wont_crash_60", "wont_rip_60"]:
         df = df[df[lc] != "IN_FLIGHT"].copy()
 
     # Time split (match Step 5)
@@ -64,7 +64,7 @@ def main():
 
     # Trade log: rows where prob > 0.7
     summary = {}
-    for lc in ["wont_crash_60", "wont_rip_60", "range_60"]:
+    for lc in ["wont_crash_60", "wont_rip_60"]:
         prob_col = f"prob_{lc}"
         signal_mask = pred_df[prob_col] > 0.7
         n_fired = signal_mask.sum()

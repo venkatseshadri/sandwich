@@ -1,8 +1,8 @@
 {
   "wont_crash_60": {
-    "n_fired": 156,
-    "n_true": 73,
-    "hit_rate": 0.4679,
+    "n_fired": 0,
+    "n_true": 0,
+    "hit_rate": 0.0,
     "base_rate": 0.4383,
     "total_rows": 762
   },
@@ -11,13 +11,6 @@
     "n_true": 0,
     "hit_rate": 0.0,
     "base_rate": 0.479,
-    "total_rows": 762
-  },
-  "range_60": {
-    "n_fired": 0,
-    "n_true": 0,
-    "hit_rate": 0.0,
-    "base_rate": 0.0538,
     "total_rows": 762
   }
 }

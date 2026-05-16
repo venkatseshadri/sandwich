@@ -1,1 +1,1 @@
-{"test_n": 762, "test_pos_rate": 0.4383, "logloss": 0.7179, "brier": 0.2614, "auc": 0.5406, "top_decile_precision": 0.4679, "untrustworthy": true}
+{"test_n": 762, "test_pos_rate": 0.4383, "logloss": 0.7161, "brier": 0.2591, "auc": 0.522, "top_decile_precision": 0.5556, "untrustworthy": true}
