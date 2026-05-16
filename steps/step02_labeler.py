@@ -179,7 +179,8 @@ def validate_labeler(df, labels_df):
                 Y = LABEL_PARAMS["wont_crash_60"]["Y"]
                 T = LABEL_PARAMS["wont_crash_60"]["T_minutes"]
                 window = df.iloc[i + 1 : i + 1 + T]
-                min_spot = window["spot"].min()
+                window = window[window["date"] == df.iloc[i]["date"]]
+                min_spot = window["spot"].min() if len(window) > 0 else float("nan")
                 dd = entry_spot - min_spot
                 print(
                     f"  idx={i} entry_spot={entry_spot} min_next60={min_spot} dd={dd:.1f}≤{Y} ✓"

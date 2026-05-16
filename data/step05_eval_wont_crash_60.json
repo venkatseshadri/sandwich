@@ -1,1 +1,1 @@
-{"test_n": 762, "test_pos_rate": 0.4383, "logloss": 0.7732, "brier": 0.2804, "auc": 0.4874, "top_decile_precision": 0.4052, "untrustworthy": true}
+{"test_n": 762, "test_pos_rate": 0.4383, "logloss": 0.7627, "brier": 0.2772, "auc": 0.448, "top_decile_precision": 0.3444, "untrustworthy": false, "min_trusted_train": 300, "actual_train_n": 1777}

@@ -64,11 +64,11 @@ def prepare_xy(df, label_col):
     y = (y_raw == "TRUE").astype(int)
     timestamps = df["timestamp"]
 
-    # Impute NaN with column median (from training split)
-    medians = X.median()
-    X = X.fillna(medians)
+    # Do NOT impute here. Imputation must happen AFTER time_split,
+    # using ONLY training-data medians, applied to both train and test.
+    # Return raw X with NaNs intact.
 
-    return X, y, timestamps, X_cols, medians
+    return X, y, timestamps, X_cols
 
 
 def time_split(X, y, timestamps, train_frac=0.7):
@@ -130,13 +130,19 @@ def train_all_labels(df, label_cols):
         print(f"Training: {lc}")
         print(f"{'=' * 60}")
 
-        X, y, timestamps, X_cols, medians = prepare_xy(df, lc)
+        X, y, timestamps, X_cols = prepare_xy(df, lc)
         print(f"Features: {len(X_cols)} columns, {len(X)} rows")
         print(f"Positive rate: {y.mean():.2%}")
 
         X_train, X_test, y_train, y_test, split_ts = time_split(X, y, timestamps)
         print(f"Train: {len(X_train)} rows, Test: {len(X_test)} rows")
         print(f"Split: {split_ts}")
+
+        # Compute medians from TRAIN ONLY, apply to both train and test
+        medians = X_train.median()
+        medians = medians.fillna(0)
+        X_train = X_train.fillna(medians)
+        X_test = X_test.fillna(medians)
 
         model = train_one(X_train, y_train)
         ev = evaluate(model, X_test, y_test)
@@ -153,12 +159,21 @@ def train_all_labels(df, label_cols):
         with open(medians_path, "w") as f:
             json.dump({k: float(v) for k, v in medians.items()}, f)
 
-        ev["untrustworthy"] = True
+        # Conditional untrustworthy flag based on sample size
+        MIN_TRUSTED_TRAIN = 20 * len(X_cols)
+        ev["untrustworthy"] = len(X_train) < MIN_TRUSTED_TRAIN
+        ev["min_trusted_train"] = MIN_TRUSTED_TRAIN
+        ev["actual_train_n"] = len(X_train)
+
         with open(eval_path, "w") as f:
             json.dump(ev, f)
 
         results[lc] = ev
         print(f"Eval: {json.dumps(ev)}")
+
+        # Calibration check inline (only for wont_crash_60 to limit noise)
+        if lc == "wont_crash_60":
+            calibration_check(model, X_test, y_test, lc)
 
     # Feature columns order
     with open(DATA_DIR / "step05_feature_columns.json", "w") as f:
@@ -210,13 +225,6 @@ def main():
     )
 
     results = train_all_labels(df, LABEL_COLS)
-
-    # Calibration check for wont_crash_60
-    X, y, timestamps, X_cols, medians = prepare_xy(df, "wont_crash_60")
-    X_train, X_test, y_train, y_test, _ = time_split(X, y, timestamps)
-    with open(DATA_DIR / "step05_model_wont_crash_60.pkl", "rb") as f:
-        model = pickle.load(f)
-    calibration_check(model, X_test, y_test, "wont_crash_60")
 
     print("\nStep 5 complete.")
 
