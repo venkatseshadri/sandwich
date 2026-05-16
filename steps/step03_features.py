@@ -94,24 +94,36 @@ def compute_trend_multitf_features(df):
 
     df = df.reset_index()
 
-    # trend_1d: daily close direction + 5-day slope
+    # trend_1d: requires 5+ prior trading days for non-zero output
     daily_close = df.groupby("date")["spot"].last()
     daily_dir = (daily_close > daily_close.shift(1)).astype(int) - (
         daily_close < daily_close.shift(1)
     ).astype(int)
-    daily_slope = pd.Series(0, index=daily_dir.index)
-    if len(daily_dir) >= 6:
-        daily_slope = daily_dir.rolling(5, min_periods=1).mean()
+
+    # 5-day rolling mean of direction — only meaningful with 5+ prior days
+    # Use min_periods=5 (NOT 1) to enforce data sufficiency
+    daily_slope = daily_dir.rolling(5, min_periods=5).mean()
+
     t1d_map = {}
-    for d in sorted(df["date"].unique()):
+    sorted_dates = sorted(df["date"].unique())
+    for date_idx, d in enumerate(sorted_dates):
+        # Need at least 5 prior days (i.e., this is the 6th day or later)
+        if date_idx < 5:
+            t1d_map[d] = 0
+            continue
+
         dir_val = daily_dir.get(d, 0)
-        slope_val = daily_slope.get(d, 0)
-        if dir_val > 0 and slope_val > 0:
+        slope_val = daily_slope.get(d, np.nan)
+
+        if pd.isna(slope_val):
+            t1d_map[d] = 0
+        elif dir_val > 0 and slope_val > 0:
             t1d_map[d] = 1
         elif dir_val < 0 and slope_val < 0:
             t1d_map[d] = -1
         else:
             t1d_map[d] = 0
+
     df["trend_1d"] = df["date"].map(t1d_map).fillna(0).astype(int)
 
     print(f"trend features: trend_1m, trend_5m, trend_1h, trend_1d")
@@ -142,15 +154,29 @@ def compute_volatility_features(df):
 
 
 def compute_volume_features(df):
-    """Adds 1 feature: vwap_distance. VWAP resets per date, uniform 1-min volume proxy."""
+    """
+    Adds 1 feature: vwap_distance.
+
+    Note: market_data has no volume column. We use an intraday running mean
+    of spot as a VWAP proxy (each minute weighted equally). This is NOT a
+    true VWAP. The feature name 'vwap_distance' is retained for clarity at
+    the model layer, but the underlying computation is intraday_running_mean.
+    """
+    df = df.copy()
     spot = df["spot"].astype(float)
-    vwap = spot.groupby(df["date"]).expanding().mean().droplevel(0).sort_index()
-    df["vwap_distance"] = (spot - vwap) / spot
+    intraday_running_mean = (
+        spot.groupby(df["date"]).expanding().mean().droplevel(0).sort_index()
+    )
+    df["vwap_distance"] = (spot - intraday_running_mean) / spot
     return df
 
 
 def compute_option_features(market_df, opts_df):
     """Adds 3 features: opt_atm_iv, opt_pcr_oi, opt_atm_oi_change_5m."""
+    import time
+
+    t0 = time.time()
+
     mdf = market_df.copy()
     mdf["opt_atm_iv"] = np.nan
     mdf["opt_pcr_oi"] = np.nan
@@ -193,7 +219,10 @@ def compute_option_features(market_df, opts_df):
             mdf.at[i, "opt_atm_oi_change_5m"] = oi_now - oi_prev
 
     mdf = mdf.drop(columns=["ts_str"])
-    print(f"option features: opt_atm_iv, opt_pcr_oi, opt_atm_oi_change_5m")
+    elapsed = time.time() - t0
+    print(
+        f"option features: opt_atm_iv, opt_pcr_oi, opt_atm_oi_change_5m ({elapsed:.1f}s)"
+    )
     return mdf
 
 
@@ -214,49 +243,30 @@ def compute_expiry_features(df):
 def compute_structure_features(df):
     """
     Adds 2 features: sr_dist_to_yday_high, sr_dist_to_yday_low.
-    For each row at date D, use max(spot) and min(spot) for date D-1.
+
+    For each row at date D with current spot S:
+        sr_dist_to_yday_high = (prev_day_high - S) / S
+        sr_dist_to_yday_low  = (S - prev_day_low)  / S
+
+    Both vary minute-by-minute as spot moves.
+    First trading date in the dataset has both features = NaN.
     """
-    spot = df["spot"].astype(float)
+    df = df.copy()
+
     daily_max = df.groupby("date")["spot"].max()
     daily_min = df.groupby("date")["spot"].min()
     prev_max = daily_max.shift(1)
     prev_min = daily_min.shift(1)
 
-    df["sr_dist_to_yday_high"] = df["date"].map(
-        lambda d: (
-            (prev_max.get(d, np.nan) - spot[df["date"] == d].iloc[0])
-            / spot[df["date"] == d].iloc[0]
-            if d in prev_max.index and not pd.isna(prev_max[d])
-            else np.nan
-        )
-    )
-    df["sr_dist_to_yday_low"] = df["date"].map(
-        lambda d: (
-            (spot[df["date"] == d].iloc[0] - prev_min.get(d, np.nan))
-            / spot[df["date"] == d].iloc[0]
-            if d in prev_min.index and not pd.isna(prev_min[d])
-            else np.nan
-        )
-    )
+    # Map prev-day's high/low onto every row of the current day
+    df["_yday_high"] = df["date"].map(prev_max)
+    df["_yday_low"] = df["date"].map(prev_min)
 
-    # Vectorize: compute per-date then broadcast
-    df["sr_dist_to_yday_high"] = np.nan
-    df["sr_dist_to_yday_low"] = np.nan
-    for i, d in enumerate(sorted(df["date"].unique())):
-        if i == 0:
-            continue
-        prev_d = sorted(df["date"].unique())[i - 1]
-        day_mask = df["date"] == d
-        that_day_spot = df.loc[day_mask, "spot"]
-        if len(that_day_spot) == 0:
-            continue
-        ref_spot = that_day_spot.iloc[0]
-        df.loc[day_mask, "sr_dist_to_yday_high"] = (
-            prev_max[prev_d] - ref_spot
-        ) / ref_spot
-        df.loc[day_mask, "sr_dist_to_yday_low"] = (
-            ref_spot - prev_min[prev_d]
-        ) / ref_spot
+    # Compute distance using CURRENT row's spot, not day-opening spot
+    df["sr_dist_to_yday_high"] = (df["_yday_high"] - df["spot"]) / df["spot"]
+    df["sr_dist_to_yday_low"] = (df["spot"] - df["_yday_low"]) / df["spot"]
+
+    df = df.drop(columns=["_yday_high", "_yday_low"])
 
     print(f"structure features: sr_dist_to_yday_high, sr_dist_to_yday_low")
     return df
@@ -336,6 +346,23 @@ def main():
     print("=" * 60)
     print("Sandwich Step 3 — Feature Panel (R2: 15-feature lean)")
     print("=" * 60)
+
+    # Diagnostic: option chain coverage
+    con = duckdb.connect(str(DB_PATH), read_only=True)
+    mkt_ts = con.execute(
+        f"SELECT COUNT(DISTINCT timestamp) FROM market_data WHERE index_name='{INDEX}'"
+    ).fetchone()[0]
+    opt_total = con.execute("SELECT COUNT(*) FROM option_snapshots").fetchone()[0]
+    opt_filt = con.execute(
+        "SELECT COUNT(*) FROM option_snapshots WHERE tsym LIKE 'NIFTY%' AND expiry_label='weekly'"
+    ).fetchone()[0]
+    opt_dt = con.execute(
+        "SELECT COUNT(DISTINCT timestamp) FROM option_snapshots WHERE tsym LIKE 'NIFTY%' AND expiry_label='weekly'"
+    ).fetchone()[0]
+    con.close()
+    print(f"\nOption chain coverage: {opt_total:,} total rows, {opt_filt:,} filtered")
+    print(f"Distinct timestamps: market_data={mkt_ts:,}  option_snapshots={opt_dt:,}")
+    print(f"Ratio filtered_rows/distinct_ts: {opt_filt / opt_dt:.1f}")
 
     features_df = assemble_feature_panel()
     feature_cols = [

@@ -7,9 +7,9 @@
     "total_rows": 762
   },
   "wont_rip_60": {
-    "n_fired": 0,
-    "n_true": 0,
-    "hit_rate": 0.0,
+    "n_fired": 83,
+    "n_true": 37,
+    "hit_rate": 0.4458,
     "base_rate": 0.479,
     "total_rows": 762
   }
