@@ -4,7 +4,7 @@ Entry-signal research project. Produces probabilistic directional/path signals f
 
 ## Status
 
-Step 2: Labeler — in progress.
+POC complete ✅ (2026-05-16). All 6 steps done.
 
 ## Layout
 
@@ -19,10 +19,19 @@ Each step is a standalone Python script. From the repo root:
 
     python sandwich/steps/step01_connect_and_inspect.py
     python sandwich/steps/step02_labeler.py
+    python sandwich/steps/step03_features.py
+    python sandwich/steps/step04_base_rates_and_lift.py
+    python sandwich/steps/step05_model.py
+    python sandwich/steps/step06_signal_api_test.py
 
 ## Reports
 
 - [Step 1 Report](reports/step01_report.md) — Connect & Inspect
+- [Step 2 Report](reports/step02_report.md) — Labeler
+- [Step 3 Report](reports/step03_report.md) — Feature Panel
+- [Step 4 Report](reports/step04_report.md) — Base Rates & Lift
+- [Step 5 Report](reports/step05_report.md) — Model Training
+- [Step 6 Report](reports/step06_report.md) — Signal API
 
 ## Rules
 
@@ -34,8 +43,8 @@ Each step is a standalone Python script. From the repo root:
 ## Steps log
 
 - Step 1: Connect & Inspect — ✅ complete (2026-05-16)
-- Step 2: Labeler — in progress
-- Step 3: Feature Panel — not started
-- Step 4: Base Rates & Feature Lift — not started
-- Step 5: Model Training — not started
-- Step 6: Signal API — not started
+- Step 2: Labeler — ✅ complete (2026-05-16)
+- Step 3: Feature Panel — ✅ complete (2026-05-16)
+- Step 4: Base Rates & Feature Lift — ✅ complete (2026-05-16)
+- Step 5: Model Training — ✅ complete (2026-05-16)
+- Step 6: Signal API — ✅ complete (2026-05-16)
