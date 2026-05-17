@@ -49,6 +49,20 @@ Each step is a standalone Python script. From the repo root:
 - Step 5: Model Training — ✅ complete (2026-05-16)
 - Step 6: Signal API — ✅ complete (2026-05-16)
 
+## Daily reports
+
+After R3-Daily, Sandwich generates a daily markdown report at:
+`sandwich/reports/daily/YYYY-MM-DD.md`
+
+Run manually with:
+python3 steps/step07_daily_report.py
+
+The first report includes a glossary. Subsequent reports omit it for brevity.
+
+The report is designed for two readers:
+1. The user, glancing on a phone in the morning (~30 sec to scan)
+2. Claude, when the user pastes the report for review and trend detection
+
 ## Review status
 
 All 7 source files independently reviewed (step01–step06 + signal_api).
