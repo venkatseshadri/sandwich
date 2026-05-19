@@ -79,19 +79,33 @@ class SandwichSignalEngine:
             imputed_per_label[label] = imputed
 
         imputed_features = imputed_per_label["wont_crash_60"]
+        n_imputed = len(imputed_features)
+        pct_imputed = (n_imputed / len(self.feature_cols) * 100) if self.feature_cols else 0
 
         sample_meta = self.metadata.get("wont_crash_60", {})
+        # Bug-S1 fix: read untrustworthy from metadata (don't hardcode to True)
+        # Bug-S3 fix: flag as untrustworthy if >50% of features are imputed
+        metadata_untrustworthy = sample_meta.get("untrustworthy", False)
+        imputation_untrustworthy = pct_imputed > 50
+        final_untrustworthy = metadata_untrustworthy or imputation_untrustworthy
+
         return {
             "timestamp": timestamp,
             "probabilities": probs,
             "model_metadata": {
                 "trained_on_n": sample_meta.get("actual_train_n", 0),
                 "test_n": sample_meta.get("test_n", 0),
-                "untrustworthy": sample_meta.get("untrustworthy", True),
+                "untrustworthy": final_untrustworthy,
+                "untrustworthy_reason": (
+                    "metadata" if metadata_untrustworthy else
+                    f"imputation:{pct_imputed:.0f}%" if imputation_untrustworthy else
+                    None
+                ),
                 "min_trusted_train": sample_meta.get("min_trusted_train"),
                 "features_imputed": imputed_features,
-                "n_features_imputed": len(imputed_features),
+                "n_features_imputed": n_imputed,
                 "n_features_total": len(self.feature_cols),
+                "pct_features_imputed": round(pct_imputed, 1),
             },
         }
 
